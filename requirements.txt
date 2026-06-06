@@ -1,0 +1,9 @@
+yt-dlp
+openai-whisper
+anthropic
+flask
+python-dotenv
+colorama
+tqdm
+requests
+clamd

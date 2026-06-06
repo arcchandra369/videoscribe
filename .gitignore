@@ -1,0 +1,71 @@
+# ── API Keys & Secrets ──────────────────────────────
+.env
+*.env
+.env.local
+.env.production
+secrets.json
+credentials.json
+
+# ── Downloaded Media (temp files) ───────────────────
+downloads/
+*.mp3
+*.mp4
+*.m4a
+*.webm
+*.wav
+*.ogg
+*.flac
+
+# ── Quarantine (flagged virus files) ────────────────
+quarantine/
+
+# ── Transcript output files ─────────────────────────
+transcripts/
+
+# ── Graphify knowledge graph output ─────────────────
+graphify-out/
+
+# ── Python cache ────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ── Virtual environments ─────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env/
+
+# ── Whisper model cache ──────────────────────────────
+~/.cache/whisper/
+*.pt
+
+# ── macOS system files ───────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# ── IDE / Editor files ───────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+logs/
+
+# ── Test artifacts ───────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoScribe — AI Video Transcription</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=4">
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <div class="header-icon">▶</div>
+    <h1>Video<span>Scribe</span></h1>
+  </div>
+  <p class="tagline">AI-Powered Video Transcription &nbsp;&bull;&nbsp; YouTube &bull; Facebook &bull; TikTok &bull; Twitter/X &bull; +1000 more</p>
+</header>
+
+<main>
+  <section class="panel input-panel">
+    <h2><span class="panel-icon">✦</span> New Transcription</h2>
+
+    <div class="field">
+      <label for="url">Video URL</label>
+      <input type="url" id="url" placeholder="https://youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="whisper_model">Processing Speed</label>
+        <select id="whisper_model">
+          <option value="tiny">Fastest — lower accuracy</option>
+          <option value="base" selected>Fast — recommended</option>
+          <option value="small">Balanced</option>
+          <option value="medium">Accurate — slower</option>
+          <option value="large">Best quality — slowest</option>
+        </select>
+        <p class="field-caption">Runs locally — does not affect API token usage</p>
+      </div>
+
+      <div class="field">
+        <label for="task">Claude Task</label>
+        <select id="task">
+          <option value="summarize">Summarize the video</option>
+          <option value="keypoints">Extract key points</option>
+          <option value="notes">Generate detailed notes</option>
+          <option value="actions">Extract action items</option>
+          <option value="translate">Translate to Spanish</option>
+          <option value="blog">Generate a blog post</option>
+          <option value="custom">Custom instruction...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field" id="custom-field" style="display:none">
+      <label for="custom_task">Custom Instruction</label>
+      <input type="text" id="custom_task" placeholder="e.g. Extract all mentioned statistics as a table">
+    </div>
+
+    <div class="field">
+      <div id="scan-badge" class="scan-badge hidden"></div>
+    </div>
+
+    <button id="run-btn" onclick="startProcess()">
+      ▶ &nbsp;Run VideoScribe
+    </button>
+  </section>
+
+  <section class="panel log-panel">
+    <h2><span class="panel-icon">◈</span> Progress Log</h2>
+    <div id="log" class="log-output"></div>
+  </section>
+
+  <section class="panel transcript-panel">
+    <h2>
+      <span class="panel-icon">≡</span> Transcript
+      <span id="transcript-dl" class="dl-btn hidden" onclick="downloadFile(transcriptFile)">⬇ Download</span>
+    </h2>
+    <div id="transcript" class="content-box"></div>
+  </section>
+
+  <section class="panel output-panel">
+    <h2>
+      <span class="panel-icon">✦</span> Claude Output
+      <span id="output-dl" class="dl-btn hidden" onclick="downloadFile(outputFile)">⬇ Download</span>
+    </h2>
+    <div id="claude-output" class="content-box"></div>
+  </section>
+
+  <section class="panel history-panel">
+    <h2><span class="panel-icon">⊙</span> Download Your Transcript!</h2>
+    <div id="history-list" class="history-list"></div>
+  </section>
+</main>
+
+<script>
+let transcriptFile = null;
+let outputFile = null;
+let currentReqId = null;
+let eventSource = null;
+
+document.getElementById("task").addEventListener("change", function () {
+  document.getElementById("custom-field").style.display =
+    this.value === "custom" ? "block" : "none";
+});
+
+function log(msg, cls = "") {
+  const el = document.getElementById("log");
+  const line = document.createElement("div");
+  line.className = "log-line " + cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearAll() {
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("transcript").textContent = "";
+  document.getElementById("claude-output").textContent = "";
+  document.getElementById("scan-badge").className = "scan-badge hidden";
+  document.getElementById("transcript-dl").className = "dl-btn hidden";
+  document.getElementById("output-dl").className = "dl-btn hidden";
+  transcriptFile = null;
+  outputFile = null;
+}
+
+function startProcess() {
+  const url = document.getElementById("url").value.trim();
+  if (!url) { alert("Please enter a video URL."); return; }
+
+  clearAll();
+
+  const taskEl = document.getElementById("task");
+  let task = taskEl.value;
+  if (task === "custom") {
+    task = document.getElementById("custom_task").value.trim() || "summarize";
+  }
+
+  const whisperModel = document.getElementById("whisper_model").value;
+  const reqId = "req_" + Date.now();
+  currentReqId = reqId;
+
+  const btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span style="opacity:0.7">Processing...</span>';
+
+  if (eventSource) eventSource.close();
+
+  eventSource = new EventSource("/stream/" + reqId);
+  eventSource.addEventListener("log", e => {
+    const msg = JSON.parse(e.data);
+    const cls = msg.startsWith("[✓]") ? "success" : msg.startsWith("[✗]") ? "error" : msg.startsWith("[⚠]") ? "warning" : "";
+    log(msg, cls);
+  });
+
+  eventSource.addEventListener("scan_status", e => {
+    const status = JSON.parse(e.data);
+    const badge = document.getElementById("scan-badge");
+    badge.className = "scan-badge " + (status === "CLEAN" ? "clean" : "threat");
+    badge.textContent = status === "CLEAN" ? "✓ Scan Clean" : "✗ Threat Detected";
+  });
+
+  eventSource.addEventListener("transcript", e => {
+    document.getElementById("transcript").textContent = JSON.parse(e.data);
+  });
+
+  eventSource.addEventListener("claude_chunk", e => {
+    const box = document.getElementById("claude-output");
+    box.textContent += JSON.parse(e.data);
+    box.scrollTop = box.scrollHeight;
+  });
+
+  eventSource.addEventListener("done", e => {
+    const data = JSON.parse(e.data);
+    transcriptFile = data.transcript_file;
+    outputFile = data.output_file;
+    document.getElementById("transcript-dl").className = "dl-btn";
+    document.getElementById("output-dl").className = "dl-btn";
+    log("[✓] Complete!", "success");
+    btn.disabled = false;
+    btn.innerHTML = '▶ &nbsp;Run VideoScribe';
+    eventSource.close();
+    loadHistory();
+  });
+
+  eventSource.addEventListener("error", e => {
+    if (e.data) {
+      try { log("[✗] Error: " + JSON.parse(e.data), "error"); } catch {}
+    }
+    btn.disabled = false;
+    btn.innerHTML = '▶ &nbsp;Run VideoScribe';
+  });
+
+  eventSource.addEventListener("close", () => {
+    btn.disabled = false;
+    btn.innerHTML = '▶ &nbsp;Run VideoScribe';
+    eventSource.close();
+  });
+
+  fetch("/process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, task, whisper_model: whisperModel, req_id: reqId }),
+  });
+}
+
+function downloadFile(filename) {
+  if (filename) window.location.href = "/download/" + filename;
+}
+
+function loadHistory() {
+  fetch("/history").then(r => r.json()).then(files => {
+    const el = document.getElementById("history-list");
+    el.innerHTML = "";
+    if (files.length === 0) {
+      el.innerHTML = '<span style="color:var(--text-muted);font-size:12px">No transcripts yet.</span>';
+      return;
+    }
+    files.forEach(f => {
+      const div = document.createElement("div");
+      div.className = "history-item";
+      div.id = "history-" + f;
+      div.innerHTML = `<span>${f}</span><span class="dl-btn" onclick="downloadFile('${f}')">⬇ Download</span><span class="del-btn" onclick="deleteFile('${f}')">✕</span>`;
+      el.appendChild(div);
+    });
+  });
+}
+
+function deleteFile(filename) {
+  fetch("/delete/" + filename, { method: "DELETE" }).then(r => {
+    if (r.ok) {
+      const el = document.getElementById("history-" + filename);
+      if (el) el.remove();
+      const list = document.getElementById("history-list");
+      if (list && list.children.length === 0) {
+        list.innerHTML = '<span style="color:var(--text-muted);font-size:12px">No transcripts yet.</span>';
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
