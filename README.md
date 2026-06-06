@@ -78,8 +78,10 @@ MAX_VIDEO_DURATION_MINUTES=120
 ### Web UI (recommended)
 ```bash
 python3 app.py
-# Open http://localhost:8080 in your browser
 ```
+Then open **http://localhost:8080** in your browser. `localhost` always means your own machine — this works on any OS.
+
+> **macOS note:** If ffmpeg isn't found, run with: `PATH="/opt/homebrew/bin:$PATH" python3 app.py`
 
 ### CLI
 ```bash
